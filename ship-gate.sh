@@ -355,7 +355,7 @@ if [ -d "$SCAN_DIR" ]; then
 
   # Also look for YAML/frontmatter "derivative: true" in any markdown file
   if [ -z "$DERIVATIVE_SIDECAR" ]; then
-    DERIVATIVE_SIDECAR="$(grep -rl 'derivative: true\|derivative:true' "$SCAN_DIR" --include='*.md' --include='*.yaml' --include='*.yml' -l 2>/dev/null | head -1 || true)"
+    DERIVATIVE_SIDECAR="$(grep -rlE '^[[:space:]]*derivative:[[:space:]]*true' "$SCAN_DIR" --include='*.md' --include='*.yaml' --include='*.yml' 2>/dev/null | head -1 || true)"
   fi
 fi
 
@@ -363,7 +363,7 @@ fi
 # content derived from someone else's structure or argument.
 RESPONSE_PIECE=""
 if [ -d "$SCAN_DIR" ]; then
-  RESPONSE_PIECE="$(grep -rl 'responding-to:\|source-author:\|based-on:' "$SCAN_DIR" --include='*.md' 2>/dev/null | head -1 || true)"
+  RESPONSE_PIECE="$(grep -rlE '^[[:space:]]*(responding-to|source-author|based-on):' "$SCAN_DIR" --include='*.md' 2>/dev/null | head -1 || true)"
 fi
 
 if [ -n "$DERIVATIVE_SIDECAR" ]; then
