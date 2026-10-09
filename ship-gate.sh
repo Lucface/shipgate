@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # =============================================================================
-# ship-gate.sh — ShipGate: a standalone pre-publish/pre-push gate.
+# ship-gate.sh: ShipGate, a standalone pre-publish and pre-push gate.
 # Runs secret scans + a LICENSE check + an attribution check; nonzero exit = block.
 # Usage:   ship-gate.sh <path-or-jobdir>
 #
 # Gates (all must pass; exit nonzero = block):
-#   (a) gitleaks dir/git          — secret scan on filesystem + git history
-#   (b) trufflehog filesystem/git — verified-secrets scan + git history
-#   (c) LICENSE present + SPDX    — license stamp check
-#   (d) credit-check              — flag un-attributed derivative content
+#   (a) gitleaks dir/git: secret scan on filesystem + git history
+#   (b) trufflehog filesystem/git: verified-secrets scan + git history
+#   (c) LICENSE: present, its text names a known license, no SPDX line inside it
+#   (d) credit-check: flag un-attributed derivative content
 #
 # Behavior:
 #   - If a scanner is missing at runtime: WARN + run the others, NEVER silently pass
@@ -66,7 +66,7 @@ else
   SINGLE_FILE=""
 fi
 
-echo -e "${BOLD}=== SHIPGATE — PRE-PUBLISH GATE ===${RESET}"
+echo -e "${BOLD}=== SHIPGATE: PRE-PUBLISH GATE ===${RESET}"
 echo -e "Target:   $TARGET"
 echo -e "Scan dir: $SCAN_DIR"
 echo ""
@@ -79,11 +79,11 @@ if git -C "$SCAN_DIR" rev-parse --git-dir &>/dev/null 2>&1; then
   GIT_ROOT="$(git -C "$SCAN_DIR" rev-parse --show-toplevel)"
   info "Git repo detected: $GIT_ROOT"
 else
-  info "Not a git repo — skipping history scan"
+  info "Not a git repo, so the history scan is skipped"
 fi
 
 # =============================================================================
-# GATE (a): gitleaks — filesystem secret scan
+# GATE (a): gitleaks, filesystem secret scan
 # =============================================================================
 header "GATE (a): gitleaks filesystem scan"
 
@@ -91,7 +91,7 @@ GITLEAKS_BIN="$(command -v gitleaks 2>/dev/null || true)"
 
 if [ -z "$GITLEAKS_BIN" ]; then
   warn "gitleaks not found in PATH. Install: brew install gitleaks"
-  warn "Skipping gitleaks scan — this is a WARN, not a pass."
+  warn "Skipping gitleaks scan; a skipped scan is a WARN."
   SCANNERS_MISSING+=("gitleaks")
 else
   info "gitleaks $(gitleaks version 2>/dev/null || echo '(version unknown)')"
@@ -105,7 +105,7 @@ else
   # (The old `detect --source --no-git` syntax was removed in v8.x.)
   _gitleaks_show_findings() {
     local out_file="$1"
-    # Output is JSON-lines in v8 dir mode, JSON array in git mode — handle both
+    # Output is JSON-lines in v8 dir mode, JSON array in git mode; handle both
     python3 - "$out_file" <<'PYEOF'
 import json, sys
 raw = open(sys.argv[1]).read().strip()
@@ -171,7 +171,7 @@ PYEOF
 fi
 
 # =============================================================================
-# GATE (b): trufflehog — verified secrets (filesystem + git history)
+# GATE (b): trufflehog, verified secrets (filesystem + git history)
 # =============================================================================
 header "GATE (b): trufflehog verified-secrets scan"
 
@@ -179,12 +179,12 @@ TRUFFLEHOG_BIN="$(command -v trufflehog 2>/dev/null || true)"
 
 if [ -z "$TRUFFLEHOG_BIN" ]; then
   warn "trufflehog not found in PATH. Install: brew install trufflehog"
-  warn "Skipping trufflehog scan — this is a WARN, not a pass."
+  warn "Skipping trufflehog scan; a skipped scan is a WARN."
   SCANNERS_MISSING+=("trufflehog")
 else
   info "trufflehog $(trufflehog --version 2>&1 | head -1)"
 
-  # Portable mktemp (-t) — see note in GATE (a) above re: macOS BSD behavior.
+  # Portable mktemp (-t); see the note in GATE (a) above about macOS BSD behavior.
   TRUFFLE_FS_OUT="$(mktemp -t ship-gate-truffle-fs)"
   TRUFFLE_GIT_OUT="$(mktemp -t ship-gate-truffle-git)"
   TRUFFLE_FAILED=0
@@ -336,7 +336,7 @@ else
 fi
 
 # =============================================================================
-# GATE (d): Credit-check — derivative content attribution
+# GATE (d): Credit-check, derivative content attribution
 # =============================================================================
 header "GATE (d): Credit / Attribution check"
 
@@ -370,7 +370,7 @@ if [ -d "$SCAN_DIR" ]; then
 fi
 
 if [ -n "$DERIVATIVE_SIDECAR" ]; then
-  # Derivative flagged — check that CREDIT/ATTRIBUTION exists
+  # Derivative flagged: check that CREDIT/ATTRIBUTION exists
   if [ -n "$CREDIT_FILE" ]; then
     # Verify the credit file is non-empty and mentions attribution
     if grep -qiE 'source|attribution|responding to|riff|based on|credit' "$CREDIT_FILE" 2>/dev/null; then
@@ -389,7 +389,7 @@ elif [ -n "$RESPONSE_PIECE" ]; then
   else
     warn "File with 'responding-to:/source-author:' found ($RESPONSE_PIECE) but no ATTRIBUTION.md."
     warn "If this derives from someone else's structure/argument, add ATTRIBUTION.md before publish."
-    # This is a WARN not FAIL — the frontmatter key alone is not definitive
+    # This is a WARN because the frontmatter key alone is not definitive
   fi
 else
   # No derivative marker found
@@ -426,13 +426,13 @@ if [ ${#SCANNERS_MISSING[@]} -gt 0 ]; then
 fi
 
 if [ $HARD_FAIL -eq 0 ]; then
-  echo -e "\n${GREEN}${BOLD}GATE: PASS${RESET} — All hard checks passed. Safe to queue for human review."
+  echo -e "\n${GREEN}${BOLD}GATE: PASS${RESET}. All hard checks passed. Safe to queue for human review."
   echo ""
   echo "  Next step: queue for human review before publishing."
   echo ""
   exit 0
 else
-  echo -e "\n${RED}${BOLD}GATE: BLOCKED${RESET} — Fix all [FAIL] items above before publishing."
+  echo -e "\n${RED}${BOLD}GATE: BLOCKED${RESET}. Fix all [FAIL] items above before publishing."
   echo ""
   echo "  Hard failures prevent publish. Fix each [FAIL] item, then re-run:"
   echo "    ship-gate.sh $TARGET"
@@ -454,7 +454,7 @@ fi
 #   REPO_ROOT="$(git rev-parse --show-toplevel)"
 #   GATE="ship-gate.sh"
 #   if [ ! -x "$GATE" ]; then
-#     echo "WARN: ship-gate.sh not found at $GATE — skipping gate (install risk)"
+#     echo "WARN: ship-gate.sh not found at $GATE, skipping the gate (install risk)"
 #     exit 0
 #   fi
 #   exec "$GATE" "$REPO_ROOT"
