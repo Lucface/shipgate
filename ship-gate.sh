@@ -312,21 +312,23 @@ if [ -n "$LICENSE_FILE" ]; then
   # A license is recognized by its grant sentence, so a file holding only a license's name
   # (which grants nothing) is never a pass.
   SPDX_ID="$(grep -i 'SPDX-License-Identifier' "$LICENSE_FILE" | head -1 | sed 's/.*SPDX-License-Identifier://;s/[[:space:]]//g' || true)"
-  LICENSE_TEXT="$(tr -s '[:space:]' ' ' < "$LICENSE_FILE")"
+  LICENSE_TEXT="$(tr -s '[:space:]' ' ' < "$LICENSE_FILE" || true)"
   VERBATIM="Everyone is permitted to copy and distribute verbatim copies"
   KNOWN=""
+  # The long licenses come first: their files often append third-party MIT or BSD
+  # notices, and the first matching arm names the license.
   case "$LICENSE_TEXT" in
-    *"Permission is hereby granted, free of charge, to any person obtaining a copy"*) KNOWN="MIT" ;;
-    *"Permission to use, copy, modify, and/or distribute this software for any purpose"*) KNOWN="ISC" ;;
-    *"Redistribution and use in source and binary forms, with or without modification"*) KNOWN="BSD" ;;
     *"Apache License"*"Version 2.0, January 2004"*) KNOWN="Apache-2.0" ;;
     *"GNU AFFERO GENERAL PUBLIC LICENSE"*"$VERBATIM"*) KNOWN="AGPL" ;;
     *"GNU LESSER GENERAL PUBLIC LICENSE"*"$VERBATIM"*) KNOWN="LGPL" ;;
     *"GNU GENERAL PUBLIC LICENSE"*"$VERBATIM"*) KNOWN="GPL" ;;
     *"Mozilla Public License Version 2.0"*"1. Definitions"*) KNOWN="MPL-2.0" ;;
-    *"This is free and unencumbered software released into the public domain"*) KNOWN="Unlicense" ;;
     *"CC0 1.0 Universal"*"Statement of Purpose"*) KNOWN="CC0-1.0" ;;
     *"Creative Commons"*"By exercising the Licensed Rights"*) KNOWN="Creative Commons" ;;
+    *"Permission is hereby granted, free of charge, to any person obtaining a copy"*) KNOWN="MIT" ;;
+    *"Permission to use, copy, modify, and/or distribute this software for any purpose"*) KNOWN="ISC" ;;
+    *"Redistribution and use in source and binary forms, with or without modification"*) KNOWN="BSD" ;;
+    *"This is free and unencumbered software released into the public domain"*) KNOWN="Unlicense" ;;
   esac
   if [ -n "$KNOWN" ]; then
     pass "LICENSE found: $KNOWN, recognized by its grant text"
@@ -337,7 +339,7 @@ if [ -n "$LICENSE_FILE" ]; then
     # placeholders in their own how-to-apply appendix, so only the first three are checked.
     case "$KNOWN" in
       MIT|ISC|BSD)
-        if grep -qE '\[year\]|\[fullname\]|<year>|<copyright holders?>|<owner>' "$LICENSE_FILE"; then
+        if grep -qiE '\[year\]|\[fullname\]|<year>|<copyright holders?>|<owner>' "$LICENSE_FILE"; then
           warn "LICENSE still holds template placeholders such as [year] or [fullname]. Fill in the year and the copyright holder in $LICENSE_FILE"
         fi
         ;;
