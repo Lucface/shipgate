@@ -312,13 +312,16 @@ if [ -n "$LICENSE_FILE" ]; then
   # A license is recognized by its grant sentence, so a file holding only a license's name
   # (which grants nothing) is never a pass.
   SPDX_ID="$(grep -i 'SPDX-License-Identifier' "$LICENSE_FILE" | head -1 | sed 's/.*SPDX-License-Identifier://;s/[[:space:]]//g' || true)"
-  LICENSE_TEXT="$(tr -s '[:space:]' ' ' < "$LICENSE_FILE" || true)"
+  LICENSE_TEXT=""
+  if [ -r "$LICENSE_FILE" ]; then
+    LICENSE_TEXT="$(tr -s '[:space:]' ' ' < "$LICENSE_FILE" || true)"
+  fi
   VERBATIM="Everyone is permitted to copy and distribute verbatim copies"
   KNOWN=""
   # The long licenses come first: their files often append third-party MIT or BSD
   # notices, and the first matching arm names the license.
   case "$LICENSE_TEXT" in
-    *"Apache License"*"Version 2.0, January 2004"*) KNOWN="Apache-2.0" ;;
+    *"Apache License"*"Version 2.0, January 2004"*"Grant of Copyright License"*) KNOWN="Apache-2.0" ;;
     *"GNU AFFERO GENERAL PUBLIC LICENSE"*"$VERBATIM"*) KNOWN="AGPL" ;;
     *"GNU LESSER GENERAL PUBLIC LICENSE"*"$VERBATIM"*) KNOWN="LGPL" ;;
     *"GNU GENERAL PUBLIC LICENSE"*"$VERBATIM"*) KNOWN="GPL" ;;
@@ -344,6 +347,8 @@ if [ -n "$LICENSE_FILE" ]; then
         fi
         ;;
     esac
+  elif [ ! -r "$LICENSE_FILE" ]; then
+    warn "LICENSE exists but cannot be read. Check the permissions on $LICENSE_FILE"
   elif [ -n "$SPDX_ID" ]; then
     warn "LICENSE names 'SPDX-License-Identifier: $SPDX_ID' but holds no license text this gate recognizes. Put the license's full text in $LICENSE_FILE"
   else
