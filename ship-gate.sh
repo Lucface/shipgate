@@ -306,21 +306,24 @@ for candidate in LICENSE LICENSE.txt LICENSE.md COPYING; do
 done
 
 if [ -n "$LICENSE_FILE" ]; then
-  # Extract SPDX identifier from the file
+  # GitHub names a license by matching LICENSE against the license's known text, so an
+  # extra line (an SPDX header included) can stop it naming the license. The SPDX id
+  # belongs in package metadata or per-file headers; LICENSE holds the license text only.
   SPDX_ID="$(grep -i 'SPDX-License-Identifier' "$LICENSE_FILE" | head -1 | sed 's/.*SPDX-License-Identifier://;s/[[:space:]]//g' || true)"
-  if [ -n "$SPDX_ID" ]; then
+  KNOWN="$(grep -oiE 'MIT License|Apache License|GNU General Public License|BSD [0-9]+-Clause|Mozilla Public License|Creative Commons|ISC License' "$LICENSE_FILE" 2>/dev/null | head -1 || true)"
+  if [ -n "$KNOWN" ]; then
+    pass "LICENSE found: $KNOWN, recognized by its text"
+    if [ -n "$SPDX_ID" ]; then
+      warn "LICENSE also carries 'SPDX-License-Identifier: $SPDX_ID'. GitHub matches the license text, so that line can stop it naming the license. Move the id to package metadata or file headers and keep $LICENSE_FILE to the license text."
+    fi
+  elif [ -n "$SPDX_ID" ]; then
     pass "LICENSE found with SPDX-License-Identifier: $SPDX_ID"
   else
-    # Check for well-known license text even without SPDX header
-    if grep -qiE 'MIT License|Apache License|GNU General Public License|BSD [0-9]+-Clause|Mozilla Public License|Creative Commons|ISC License' "$LICENSE_FILE" 2>/dev/null; then
-      warn "LICENSE found but missing SPDX-License-Identifier header in file (detected by text match). Add 'SPDX-License-Identifier: <id>' to $LICENSE_FILE"
-    else
-      warn "LICENSE found but SPDX-License-Identifier not detected. Verify license identity in $LICENSE_FILE"
-    fi
+    warn "LICENSE found, but its text matches no license this gate knows. Verify the license in $LICENSE_FILE"
   fi
 else
-  fail "No LICENSE file found in $ROOT_FOR_LICENSE — every public ship needs a license."
-  info "Quick fix: echo 'MIT License' > LICENSE && add SPDX-License-Identifier: MIT"
+  fail "No LICENSE file found in $ROOT_FOR_LICENSE. Every public ship needs a license."
+  info "Quick fix for MIT: gh api licenses/mit --jq .body > LICENSE, then replace [year] and [fullname] in it."
 fi
 
 # (c2) Check for .env files accidentally included (defense-in-depth)
