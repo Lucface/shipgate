@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # =============================================================================
-# ship-gate.sh — ShipGate: a standalone pre-publish/pre-push gate.
+# ship-gate.sh: ShipGate, a standalone pre-publish and pre-push gate.
 # Runs secret scans + a LICENSE check + an attribution check; nonzero exit = block.
 # Usage:   ship-gate.sh <path-or-jobdir>
 #
 # Gates (all must pass; exit nonzero = block):
-#   (a) gitleaks dir/git          — secret scan on filesystem + git history
-#   (b) trufflehog filesystem/git — verified-secrets scan + git history
-#   (c) LICENSE present + SPDX    — license stamp check
-#   (d) credit-check              — flag un-attributed derivative content
+#   (a) gitleaks dir/git: secret scan on filesystem + git history
+#   (b) trufflehog filesystem/git: verified-secrets scan + git history
+#   (c) LICENSE: present, holds a known license's grant text, no SPDX line inside it
+#   (d) credit-check: flag un-attributed derivative content
 #
 # Behavior:
 #   - If a scanner is missing at runtime: WARN + run the others, NEVER silently pass
@@ -66,7 +66,7 @@ else
   SINGLE_FILE=""
 fi
 
-echo -e "${BOLD}=== SHIPGATE — PRE-PUBLISH GATE ===${RESET}"
+echo -e "${BOLD}=== SHIPGATE: PRE-PUBLISH GATE ===${RESET}"
 echo -e "Target:   $TARGET"
 echo -e "Scan dir: $SCAN_DIR"
 echo ""
@@ -79,11 +79,11 @@ if git -C "$SCAN_DIR" rev-parse --git-dir &>/dev/null 2>&1; then
   GIT_ROOT="$(git -C "$SCAN_DIR" rev-parse --show-toplevel)"
   info "Git repo detected: $GIT_ROOT"
 else
-  info "Not a git repo — skipping history scan"
+  info "Not a git repo, so the history scan is skipped"
 fi
 
 # =============================================================================
-# GATE (a): gitleaks — filesystem secret scan
+# GATE (a): gitleaks, filesystem secret scan
 # =============================================================================
 header "GATE (a): gitleaks filesystem scan"
 
@@ -91,7 +91,7 @@ GITLEAKS_BIN="$(command -v gitleaks 2>/dev/null || true)"
 
 if [ -z "$GITLEAKS_BIN" ]; then
   warn "gitleaks not found in PATH. Install: brew install gitleaks"
-  warn "Skipping gitleaks scan — this is a WARN, not a pass."
+  warn "Skipping gitleaks scan; a skipped scan is a WARN."
   SCANNERS_MISSING+=("gitleaks")
 else
   info "gitleaks $(gitleaks version 2>/dev/null || echo '(version unknown)')"
@@ -105,7 +105,7 @@ else
   # (The old `detect --source --no-git` syntax was removed in v8.x.)
   _gitleaks_show_findings() {
     local out_file="$1"
-    # Output is JSON-lines in v8 dir mode, JSON array in git mode — handle both
+    # Output is JSON-lines in v8 dir mode, JSON array in git mode; handle both
     python3 - "$out_file" <<'PYEOF'
 import json, sys
 raw = open(sys.argv[1]).read().strip()
@@ -171,7 +171,7 @@ PYEOF
 fi
 
 # =============================================================================
-# GATE (b): trufflehog — verified secrets (filesystem + git history)
+# GATE (b): trufflehog, verified secrets (filesystem + git history)
 # =============================================================================
 header "GATE (b): trufflehog verified-secrets scan"
 
@@ -179,12 +179,12 @@ TRUFFLEHOG_BIN="$(command -v trufflehog 2>/dev/null || true)"
 
 if [ -z "$TRUFFLEHOG_BIN" ]; then
   warn "trufflehog not found in PATH. Install: brew install trufflehog"
-  warn "Skipping trufflehog scan — this is a WARN, not a pass."
+  warn "Skipping trufflehog scan; a skipped scan is a WARN."
   SCANNERS_MISSING+=("trufflehog")
 else
   info "trufflehog $(trufflehog --version 2>&1 | head -1)"
 
-  # Portable mktemp (-t) — see note in GATE (a) above re: macOS BSD behavior.
+  # Portable mktemp (-t); see the note in GATE (a) above about macOS BSD behavior.
   TRUFFLE_FS_OUT="$(mktemp -t ship-gate-truffle-fs)"
   TRUFFLE_GIT_OUT="$(mktemp -t ship-gate-truffle-git)"
   TRUFFLE_FAILED=0
@@ -306,21 +306,57 @@ for candidate in LICENSE LICENSE.txt LICENSE.md COPYING; do
 done
 
 if [ -n "$LICENSE_FILE" ]; then
-  # Extract SPDX identifier from the file
+  # GitHub names a license by matching LICENSE against the license's known text, so an
+  # extra line (an SPDX header included) can stop it naming the license. The SPDX id
+  # belongs in package metadata or per-file headers; LICENSE holds the license text only.
+  # A license is recognized by its grant sentence, so a file holding only a license's name
+  # (which grants nothing) is never a pass.
   SPDX_ID="$(grep -i 'SPDX-License-Identifier' "$LICENSE_FILE" | head -1 | sed 's/.*SPDX-License-Identifier://;s/[[:space:]]//g' || true)"
-  if [ -n "$SPDX_ID" ]; then
-    pass "LICENSE found with SPDX-License-Identifier: $SPDX_ID"
-  else
-    # Check for well-known license text even without SPDX header
-    if grep -qiE 'MIT License|Apache License|GNU General Public License|BSD [0-9]+-Clause|Mozilla Public License|Creative Commons|ISC License' "$LICENSE_FILE" 2>/dev/null; then
-      warn "LICENSE found but missing SPDX-License-Identifier header in file (detected by text match). Add 'SPDX-License-Identifier: <id>' to $LICENSE_FILE"
-    else
-      warn "LICENSE found but SPDX-License-Identifier not detected. Verify license identity in $LICENSE_FILE"
+  LICENSE_TEXT=""
+  if [ -r "$LICENSE_FILE" ]; then
+    LICENSE_TEXT="$(tr -s '[:space:]' ' ' < "$LICENSE_FILE" || true)"
+  fi
+  VERBATIM="Everyone is permitted to copy and distribute verbatim copies"
+  KNOWN=""
+  # The long licenses come first: their files often append third-party MIT or BSD
+  # notices, and the first matching arm names the license.
+  case "$LICENSE_TEXT" in
+    *"Apache License"*"Version 2.0, January 2004"*"Grant of Copyright License"*) KNOWN="Apache-2.0" ;;
+    *"GNU AFFERO GENERAL PUBLIC LICENSE"*"$VERBATIM"*) KNOWN="AGPL" ;;
+    *"GNU LESSER GENERAL PUBLIC LICENSE"*"$VERBATIM"*) KNOWN="LGPL" ;;
+    *"GNU GENERAL PUBLIC LICENSE"*"$VERBATIM"*) KNOWN="GPL" ;;
+    *"Mozilla Public License Version 2.0"*"1. Definitions"*) KNOWN="MPL-2.0" ;;
+    *"CC0 1.0 Universal"*"Statement of Purpose"*) KNOWN="CC0-1.0" ;;
+    *"Creative Commons"*"By exercising the Licensed Rights"*) KNOWN="Creative Commons" ;;
+    *"Permission is hereby granted, free of charge, to any person obtaining a copy"*) KNOWN="MIT" ;;
+    *"Permission to use, copy, modify, and/or distribute this software for any purpose"*) KNOWN="ISC" ;;
+    *"Redistribution and use in source and binary forms, with or without modification"*) KNOWN="BSD" ;;
+    *"This is free and unencumbered software released into the public domain"*) KNOWN="Unlicense" ;;
+  esac
+  if [ -n "$KNOWN" ]; then
+    pass "LICENSE found: $KNOWN, recognized by its grant text"
+    if [ -n "$SPDX_ID" ]; then
+      warn "LICENSE also carries 'SPDX-License-Identifier: $SPDX_ID'. GitHub matches the license text, so that line can stop it naming the license. Move the id to package metadata or file headers and keep $LICENSE_FILE to the license text."
     fi
+    # MIT, ISC and BSD put the copyright line on top; Apache and the GPLs keep template
+    # placeholders in their own how-to-apply appendix, so only the first three are checked.
+    case "$KNOWN" in
+      MIT|ISC|BSD)
+        if grep -qiE '\[year\]|\[fullname\]|<year>|<copyright holders?>|<owner>' "$LICENSE_FILE"; then
+          warn "LICENSE still holds template placeholders such as [year] or [fullname]. Fill in the year and the copyright holder in $LICENSE_FILE"
+        fi
+        ;;
+    esac
+  elif [ ! -r "$LICENSE_FILE" ]; then
+    warn "LICENSE exists but cannot be read. Check the permissions on $LICENSE_FILE"
+  elif [ -n "$SPDX_ID" ]; then
+    warn "LICENSE names 'SPDX-License-Identifier: $SPDX_ID' but holds no license text this gate recognizes. Put the license's full text in $LICENSE_FILE"
+  else
+    warn "LICENSE found, but its text matches no license this gate knows. Verify the license in $LICENSE_FILE"
   fi
 else
-  fail "No LICENSE file found in $ROOT_FOR_LICENSE — every public ship needs a license."
-  info "Quick fix: echo 'MIT License' > LICENSE && add SPDX-License-Identifier: MIT"
+  fail "No LICENSE file found in $ROOT_FOR_LICENSE. Every public ship needs a license."
+  info "Quick fix for MIT: copy the text at https://choosealicense.com/licenses/mit/ into LICENSE and fill in the year and your name (with gh signed in: gh api licenses/mit --jq .body > LICENSE, then replace [year] and [fullname])."
 fi
 
 # (c2) Check for .env files accidentally included (defense-in-depth)
@@ -333,7 +369,7 @@ else
 fi
 
 # =============================================================================
-# GATE (d): Credit-check — derivative content attribution
+# GATE (d): Credit-check, derivative content attribution
 # =============================================================================
 header "GATE (d): Credit / Attribution check"
 
@@ -367,7 +403,7 @@ if [ -d "$SCAN_DIR" ]; then
 fi
 
 if [ -n "$DERIVATIVE_SIDECAR" ]; then
-  # Derivative flagged — check that CREDIT/ATTRIBUTION exists
+  # Derivative flagged: check that CREDIT/ATTRIBUTION exists
   if [ -n "$CREDIT_FILE" ]; then
     # Verify the credit file is non-empty and mentions attribution
     if grep -qiE 'source|attribution|responding to|riff|based on|credit' "$CREDIT_FILE" 2>/dev/null; then
@@ -386,7 +422,7 @@ elif [ -n "$RESPONSE_PIECE" ]; then
   else
     warn "File with 'responding-to:/source-author:' found ($RESPONSE_PIECE) but no ATTRIBUTION.md."
     warn "If this derives from someone else's structure/argument, add ATTRIBUTION.md before publish."
-    # This is a WARN not FAIL — the frontmatter key alone is not definitive
+    # This is a WARN because the frontmatter key alone is not definitive
   fi
 else
   # No derivative marker found
@@ -423,13 +459,13 @@ if [ ${#SCANNERS_MISSING[@]} -gt 0 ]; then
 fi
 
 if [ $HARD_FAIL -eq 0 ]; then
-  echo -e "\n${GREEN}${BOLD}GATE: PASS${RESET} — All hard checks passed. Safe to queue for human review."
+  echo -e "\n${GREEN}${BOLD}GATE: PASS${RESET}. All hard checks passed. Safe to queue for human review."
   echo ""
   echo "  Next step: queue for human review before publishing."
   echo ""
   exit 0
 else
-  echo -e "\n${RED}${BOLD}GATE: BLOCKED${RESET} — Fix all [FAIL] items above before publishing."
+  echo -e "\n${RED}${BOLD}GATE: BLOCKED${RESET}. Fix all [FAIL] items above before publishing."
   echo ""
   echo "  Hard failures prevent publish. Fix each [FAIL] item, then re-run:"
   echo "    ship-gate.sh $TARGET"
@@ -451,7 +487,7 @@ fi
 #   REPO_ROOT="$(git rev-parse --show-toplevel)"
 #   GATE="ship-gate.sh"
 #   if [ ! -x "$GATE" ]; then
-#     echo "WARN: ship-gate.sh not found at $GATE — skipping gate (install risk)"
+#     echo "WARN: ship-gate.sh not found at $GATE, skipping the gate (install risk)"
 #     exit 0
 #   fi
 #   exec "$GATE" "$REPO_ROOT"

@@ -4,7 +4,7 @@ Global preferences live in `~/.claude/CLAUDE.md`. This file defines project-spec
 
 ## Project Context
 
-A **single pre-publish gate** you run (or wire as a git `pre-push` hook) before any repo or folder goes public. It fails closed — a hard finding blocks the push — so an automated or half-asleep `git push` can't leak a secret or ship something un-licensed. Four checks, each must pass:
+A **single pre-publish gate** you run (or wire as a git `pre-push` hook) before any repo or folder goes public. It fails closed: a hard finding blocks the push, so an automated or half-asleep `git push` can't leak a secret or ship something un-licensed. Four checks, each must pass:
 
 
 ## Commands

@@ -1,6 +1,6 @@
 # ShipGate
 
-A **single pre-publish gate** you run (or wire as a git `pre-push` hook) before any repo or folder goes public. It fails closed — a hard finding blocks the push — so an automated or half-asleep `git push` can't leak a secret or ship something un-licensed.
+A **single pre-publish gate** you run (or wire as a git `pre-push` hook) before any repo or folder goes public. It fails closed: a hard finding blocks the push, so an automated or half-asleep `git push` can't leak a secret or ship something un-licensed.
 
 Four checks, each must pass:
 
@@ -8,14 +8,14 @@ Four checks, each must pass:
 |---|---|
 | **(a) gitleaks** | filesystem **+ git history** secret scan |
 | **(b) trufflehog** | verified-secrets scan, filesystem + git history |
-| **(c) LICENSE** | a `LICENSE`/`COPYING` file exists (warns if no SPDX id), and **no raw `.env`** snuck in |
+| **(c) LICENSE** | a `LICENSE`/`COPYING` file exists and holds a known license's grant text (warns on a name-only stub, unfilled placeholders such as `[year]`, or an SPDX line inside it, since that can stop GitHub naming the license), and **no raw `.env`** snuck in |
 | **(d) attribution** | if content is flagged derivative (`DERIVATIVE.md`, `derivative: true`, or `responding-to:` frontmatter) it requires a `CREDIT.md`/`ATTRIBUTION.md`; nudges for an AI-assist disclosure |
 
-If a scanner isn't installed, ShipGate **warns and runs the rest — it never silently passes.**
+If a scanner isn't installed, ShipGate **warns and runs the rest; it never silently passes.**
 
 ## Why
 
-Secrets-in-git-history is the #1 way OSS releases leak credentials, and it survives even after you delete the file from `HEAD`. ShipGate scans history, not just the working tree — and bundles the boring-but-mandatory license/`.env`/attribution checks into one exit code so "is this safe to publish?" becomes a single command.
+Secrets-in-git-history is the #1 way OSS releases leak credentials, and it survives even after you delete the file from `HEAD`. ShipGate scans history as well as the working tree, and bundles the boring-but-mandatory license/`.env`/attribution checks into one exit code so "is this safe to publish?" becomes a single command.
 
 ## Install
 
@@ -46,8 +46,8 @@ printf '#!/usr/bin/env bash\nexec "%s" "$(git rev-parse --show-toplevel)"\n' "$G
 chmod +x "$H"
 ```
 
-Now `git push` runs the gate first and aborts on any hard finding. (Note: `--no-verify` bypasses it — the gate is a safety net, not a sandbox.)
+Now `git push` runs the gate first and aborts on any hard finding. (Note: `--no-verify` skips the hook, so the gate catches mistakes and cannot stop a deliberate bypass.)
 
 ## License
 
-MIT — see [LICENSE](./LICENSE). By [@Lucface](https://github.com/Lucface). Extracted clean from a larger private release pipeline.
+MIT. See [LICENSE](./LICENSE). By [@Lucface](https://github.com/Lucface). Extracted clean from a larger private release pipeline.
