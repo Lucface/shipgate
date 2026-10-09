@@ -7,7 +7,7 @@
 # Gates (all must pass; exit nonzero = block):
 #   (a) gitleaks dir/git: secret scan on filesystem + git history
 #   (b) trufflehog filesystem/git: verified-secrets scan + git history
-#   (c) LICENSE: present, its text names a known license, no SPDX line inside it
+#   (c) LICENSE: present, holds a known license's grant text, no SPDX line inside it
 #   (d) credit-check: flag un-attributed derivative content
 #
 # Behavior:
@@ -309,21 +309,47 @@ if [ -n "$LICENSE_FILE" ]; then
   # GitHub names a license by matching LICENSE against the license's known text, so an
   # extra line (an SPDX header included) can stop it naming the license. The SPDX id
   # belongs in package metadata or per-file headers; LICENSE holds the license text only.
+  # A license is recognized by its grant sentence, so a file holding only a license's name
+  # (which grants nothing) is never a pass.
   SPDX_ID="$(grep -i 'SPDX-License-Identifier' "$LICENSE_FILE" | head -1 | sed 's/.*SPDX-License-Identifier://;s/[[:space:]]//g' || true)"
-  KNOWN="$(grep -oiE 'MIT License|Apache License|GNU General Public License|BSD [0-9]+-Clause|Mozilla Public License|Creative Commons|ISC License' "$LICENSE_FILE" 2>/dev/null | head -1 || true)"
+  LICENSE_TEXT="$(tr -s '[:space:]' ' ' < "$LICENSE_FILE")"
+  VERBATIM="Everyone is permitted to copy and distribute verbatim copies"
+  KNOWN=""
+  case "$LICENSE_TEXT" in
+    *"Permission is hereby granted, free of charge, to any person obtaining a copy"*) KNOWN="MIT" ;;
+    *"Permission to use, copy, modify, and/or distribute this software for any purpose"*) KNOWN="ISC" ;;
+    *"Redistribution and use in source and binary forms, with or without modification"*) KNOWN="BSD" ;;
+    *"Apache License"*"Version 2.0, January 2004"*) KNOWN="Apache-2.0" ;;
+    *"GNU AFFERO GENERAL PUBLIC LICENSE"*"$VERBATIM"*) KNOWN="AGPL" ;;
+    *"GNU LESSER GENERAL PUBLIC LICENSE"*"$VERBATIM"*) KNOWN="LGPL" ;;
+    *"GNU GENERAL PUBLIC LICENSE"*"$VERBATIM"*) KNOWN="GPL" ;;
+    *"Mozilla Public License Version 2.0"*"1. Definitions"*) KNOWN="MPL-2.0" ;;
+    *"This is free and unencumbered software released into the public domain"*) KNOWN="Unlicense" ;;
+    *"CC0 1.0 Universal"*"Statement of Purpose"*) KNOWN="CC0-1.0" ;;
+    *"Creative Commons"*"By exercising the Licensed Rights"*) KNOWN="Creative Commons" ;;
+  esac
   if [ -n "$KNOWN" ]; then
-    pass "LICENSE found: $KNOWN, recognized by its text"
+    pass "LICENSE found: $KNOWN, recognized by its grant text"
     if [ -n "$SPDX_ID" ]; then
       warn "LICENSE also carries 'SPDX-License-Identifier: $SPDX_ID'. GitHub matches the license text, so that line can stop it naming the license. Move the id to package metadata or file headers and keep $LICENSE_FILE to the license text."
     fi
+    # MIT, ISC and BSD put the copyright line on top; Apache and the GPLs keep template
+    # placeholders in their own how-to-apply appendix, so only the first three are checked.
+    case "$KNOWN" in
+      MIT|ISC|BSD)
+        if grep -qE '\[year\]|\[fullname\]|<year>|<copyright holders?>|<owner>' "$LICENSE_FILE"; then
+          warn "LICENSE still holds template placeholders such as [year] or [fullname]. Fill in the year and the copyright holder in $LICENSE_FILE"
+        fi
+        ;;
+    esac
   elif [ -n "$SPDX_ID" ]; then
-    pass "LICENSE found with SPDX-License-Identifier: $SPDX_ID"
+    warn "LICENSE names 'SPDX-License-Identifier: $SPDX_ID' but holds no license text this gate recognizes. Put the license's full text in $LICENSE_FILE"
   else
     warn "LICENSE found, but its text matches no license this gate knows. Verify the license in $LICENSE_FILE"
   fi
 else
   fail "No LICENSE file found in $ROOT_FOR_LICENSE. Every public ship needs a license."
-  info "Quick fix for MIT: gh api licenses/mit --jq .body > LICENSE, then replace [year] and [fullname] in it."
+  info "Quick fix for MIT: copy the text at https://choosealicense.com/licenses/mit/ into LICENSE and fill in the year and your name (with gh signed in: gh api licenses/mit --jq .body > LICENSE, then replace [year] and [fullname])."
 fi
 
 # (c2) Check for .env files accidentally included (defense-in-depth)

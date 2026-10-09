@@ -8,7 +8,7 @@ Four checks, each must pass:
 |---|---|
 | **(a) gitleaks** | filesystem **+ git history** secret scan |
 | **(b) trufflehog** | verified-secrets scan, filesystem + git history |
-| **(c) LICENSE** | a `LICENSE`/`COPYING` file exists and its text names a known license (warns if an SPDX line sits inside it, since that can stop GitHub naming the license), and **no raw `.env`** snuck in |
+| **(c) LICENSE** | a `LICENSE`/`COPYING` file exists and holds a known license's grant text (warns on a name-only stub, unfilled placeholders such as `[year]`, or an SPDX line inside it, since that can stop GitHub naming the license), and **no raw `.env`** snuck in |
 | **(d) attribution** | if content is flagged derivative (`DERIVATIVE.md`, `derivative: true`, or `responding-to:` frontmatter) it requires a `CREDIT.md`/`ATTRIBUTION.md`; nudges for an AI-assist disclosure |
 
 If a scanner isn't installed, ShipGate **warns and runs the rest; it never silently passes.**
